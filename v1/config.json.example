@@ -1,0 +1,7 @@
+{
+  "store": 1,
+  "name": "Atom Oficial",
+  "index_signature_keys": ["ed25519:PREENCHA"],
+  "artifacts_base": "https://github.com/wkoch/atom-extensions/releases/download/",
+  "features": ["catalog"]
+}
