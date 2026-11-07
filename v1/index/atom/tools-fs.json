@@ -1,0 +1,36 @@
+{
+  "name": "atom/tools-fs",
+  "publisher_keys": [
+    "ed25519:Z34T3W78IZkeZ6Y1a07LJZXJiA6dRb45A62kL0RLOZw="
+  ],
+  "versions": [
+    {
+      "version": "0.2.0",
+      "kind": "extension",
+      "engine": ">=0.1.0, <2.0.0",
+      "protocol": "atom/1",
+      "requires": {
+        "packages": {},
+        "contracts": {}
+      },
+      "provides": [
+        {
+          "contract": "ai.tools@0",
+          "version": "0.1.0"
+        }
+      ],
+      "capabilities": [],
+      "artifacts": [
+        {
+          "platform": "linux-amd64",
+          "url": "artifacts/atom/atom-tools-fs-0.2.0-linux-amd64.tar.gz",
+          "sha256": "6d21e94126f7ff8aaa008292a892252a338d894db43cc9d8b7030f0c6dab6c6a",
+          "size": 2179,
+          "signature": "lzykuoCtEpnjNwLNqv7I33aRS1BMN4RVi0mcfNCPZ3SgweRreq1Ss+2dO1qYTPVPxEKTH6LpQXb+Q+wV+EOwAA=="
+        }
+      ],
+      "yanked": false,
+      "published_at": "1794020069"
+    }
+  ]
+}
