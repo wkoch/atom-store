@@ -25,12 +25,14 @@ on:
       - "v1/**"
       - "v2/**"
       - "publishers/**"
+      - ".github/workflows/store.yml"
   push:
     branches: [main]
     paths:
       - "v1/**"
       - "v2/**"
       - "publishers/**"
+      - ".github/workflows/store.yml"
   schedule:
     - cron: "0 3 * * *"
 
