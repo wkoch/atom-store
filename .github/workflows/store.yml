@@ -1,13 +1,21 @@
-# CI da loja de referência (spec store §8).
+# CI da loja de referência (specs `docs/store.md §8` e `docs/store-v2.md §8`).
 #
-# - Em PRs: valida índices + catalog (sem segredos).
-# - No `main` com secret `STORE_PRIVKEY` (seed `ed25519-seed:BASE64` da loja):
-#   re-assina índices alterados e regenera `catalog.json`, commitando de volta.
-#   Sem o secret, o job só verifica (`--check-only`) e o mantenedor assina
-#   localmente com `atom ext publish --reindex`.
+# - PRs: valida índices `v1/` + delegados `v2/` (sem segredos).
+# - `main`: re-assina `v1/` (secret `STORE_PRIVKEY`) e publica `v2/`
+#   (secrets `STORE_SNAPSHOT_KEY`/`STORE_TIMESTAMP_KEY`) a partir dos mesmos
+#   snippets (mesmos artefatos, mesmos sha256).
+# - Cron diário: re-assina só o `timestamp.json` da `v2/` (expira em 1 dia);
+#   a falha do cron notifica os mantenedores (ver `docs/operations.md`).
 #
-# Requer o CLI `atom`: release instalada ou build do repo do Atom
-# (ajuste `ATOM_REPO`/`ATOM_REV` abaixo).
+# Requer o CLI `atom` de uma TAG do repo do Atom (`ATOM_REPO`/`ATOM_REV`,
+# nunca `main`).
+#
+# Jobs `v2` ficam em espera (notice, sem falhar) enquanto `v2/` não existir
+# neste repo ou o `atom` instalado não expuser `ext publish --v2`.
+# A ferramenta v2 do core ainda não existe (`docs/store-v2.md §8`; o
+# `store::tuf::publish_repo` atual só serve p/ teste — §9). A interface
+# esperada está documentada no README ("Bloqueado no core"); os passos
+# abaixo já chamam esses comandos de forma estrita assim que existirem.
 
 name: store
 
@@ -15,19 +23,27 @@ on:
   pull_request:
     paths:
       - "v1/**"
+      - "v2/**"
       - "publishers/**"
   push:
     branches: [main]
     paths:
       - "v1/**"
+      - "v2/**"
       - "publishers/**"
+  schedule:
+    - cron: "0 3 * * *"
 
 env:
   ATOM_REPO: "https://github.com/wkoch/atom.git"
-  ATOM_REV: "main"
+  # Última tag publicada do core (traz `ext publish` v1 + `--check-only`).
+  # Mover p/ `v1.1` assim que o core tagueá-la (necessária p/ `ext publish
+  # --v2`); nunca `main`.
+  ATOM_REV: "v1.0.0"
 
 jobs:
   validate:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -62,26 +78,63 @@ jobs:
                               bad += 1
           sys.exit(1 if bad else 0)
           EOF
-      - name: Instalar atom
+      - name: Instalar atom (tag pinada)
+        run: cargo install --git "$ATOM_REPO" --rev "$ATOM_REV" --locked atom
+      - name: Verificar assinaturas e artefatos (v1)
         run: |
-          cargo install --git "$ATOM_REPO" --rev "$ATOM_REV" --locked atom || \
-            echo "atom indisponível; pulando check-only"
-      - name: Verificar assinaturas e artefatos locais
+          atom ext publish --store-dir v1 \
+            --store-key /dev/null --check-only
+
+  validate-v2:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Detectar v2
+        id: v2
         run: |
-          if command -v atom >/dev/null; then
-            atom ext publish --store-dir v1 \
-              --store-key /dev/null --check-only || true
+          if [ -d v2/metadata ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
           fi
+      - name: v2 ausente — espera (bloqueado no core)
+        if: steps.v2.outputs.present == 'false'
+        run: |
+          echo "::notice::sem v2/ neste repo; validação v2 em espera. Falta no core: 'atom ext publish --v2' (publicação v2, docs/store-v2.md §8). Ver README."
+      - name: Instalar atom (tag pinada)
+        if: steps.v2.outputs.present == 'true'
+        run: cargo install --git "$ATOM_REPO" --rev "$ATOM_REV" --locked atom
+      - name: Sondar ferramenta v2
+        id: tool
+        if: steps.v2.outputs.present == 'true'
+        run: |
+          if atom ext publish --help | grep -q -e '--v2'; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Ferramenta v2 ausente — espera
+        if: steps.v2.outputs.present == 'true' && steps.tool.outputs.ok == 'false'
+        run: |
+          echo "::notice::atom $ATOM_REV sem 'ext publish --v2'; validação v2 em espera (docs/store-v2.md §8)."
+      - name: Verificar delegados v2 (assinatura + prefixo [ST2-5])
+        if: steps.v2.outputs.present == 'true' && steps.tool.outputs.ok == 'true'
+        run: |
+          # Verifica cada delegado publisher:<pub>.json contra a chave de
+          # publishers/<pub>.toml e o prefixo de paths [ST2-5], além do que
+          # já se valida em v1/.
+          atom ext publish --v2 --store-dir v2 --check-only
 
   resign:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     needs: [validate]
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Instalar atom
+      - name: Instalar atom (tag pinada)
         run: cargo install --git "$ATOM_REPO" --rev "$ATOM_REV" --locked atom
       - name: Re-assinar índices + catalog
         env:
@@ -104,3 +157,189 @@ jobs:
           git diff --cached --quiet && echo "sem mudanças" || (
             git commit -m "store: reindex" && git push
           )
+
+  publish-v2:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    needs: [validate, validate-v2]
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Detectar v2
+        id: v2
+        run: |
+          if [ -d v2/metadata ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: v2 ausente — espera (bloqueado no core)
+        if: steps.v2.outputs.present == 'false'
+        run: |
+          echo "::notice::loja v2 ainda não inicializada. Passos: gerar chaves e 1.root.json conforme docs/operations.md (aguarda ferramenta §8 do core). Nada publicado; v1/ segue sozinha."
+      - name: Instalar atom (tag pinada)
+        if: steps.v2.outputs.present == 'true'
+        run: cargo install --git "$ATOM_REPO" --rev "$ATOM_REV" --locked atom
+      - name: Sondar ferramenta v2
+        id: tool
+        if: steps.v2.outputs.present == 'true'
+        run: |
+          if atom ext publish --help | grep -q -e '--v2'; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Ferramenta v2 ausente — espera
+        if: steps.v2.outputs.present == 'true' && steps.tool.outputs.ok == 'false'
+        run: |
+          echo "::notice::atom $ATOM_REV sem 'ext publish --v2'; publicação v2 em espera (docs/store-v2.md §8)."
+      - name: Publicar v2 dos mesmos snippets do v1
+        if: steps.v2.outputs.present == 'true' && steps.tool.outputs.ok == 'true'
+        env:
+          STORE_SNAPSHOT_KEY: ${{ secrets.STORE_SNAPSHOT_KEY }}
+          STORE_TIMESTAMP_KEY: ${{ secrets.STORE_TIMESTAMP_KEY }}
+        run: |
+          # Snippets = os mesmos .index.json do publish v1 (mesmos artefatos,
+          # mesmos sha256). Só snapshot/timestamp vivem como secrets; root e
+          # targets NUNCA entram no CI (offline, ver docs/operations.md).
+          if [ -z "$STORE_SNAPSHOT_KEY" ] || [ -z "$STORE_TIMESTAMP_KEY" ]; then
+            echo "sem STORE_SNAPSHOT_KEY/STORE_TIMESTAMP_KEY: mantenedor publica local; nada a fazer"
+            exit 0
+          fi
+          umask 077
+          snap="$(mktemp)"; ts="$(mktemp)"
+          printf '%s' "$STORE_SNAPSHOT_KEY" > "$snap"
+          printf '%s' "$STORE_TIMESTAMP_KEY" > "$ts"
+          atom ext publish --v2 --store-dir v2 \
+            --snapshot-key "$snap" --timestamp-key "$ts" \
+            snippets/*.index.json
+          rm -f "$snap" "$ts"
+      - name: Commit de volta
+        if: steps.v2.outputs.present == 'true' && steps.tool.outputs.ok == 'true'
+        run: |
+          git config user.name "store-ci"
+          git config user.email "store-ci@local"
+          git add v1 v2 publishers snippets || true
+          git diff --cached --quiet && echo "sem mudanças" || (
+            git commit -m "store: publish v1+v2" && git push
+          )
+
+  timestamp:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Detectar v2
+        id: v2
+        run: |
+          if [ -d v2/metadata ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: v2 ausente — espera (bloqueado no core)
+        if: steps.v2.outputs.present == 'false'
+        run: |
+          echo "::notice::sem v2/ neste repo; cron de timestamp em espera."
+      - name: Instalar atom (tag pinada)
+        if: steps.v2.outputs.present == 'true'
+        run: cargo install --git "$ATOM_REPO" --rev "$ATOM_REV" --locked atom
+      - name: Sondar ferramenta v2
+        id: tool
+        if: steps.v2.outputs.present == 'true'
+        run: |
+          if atom ext publish --help | grep -q -e '--v2'; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Ferramenta v2 ausente — espera
+        if: steps.v2.outputs.present == 'true' && steps.tool.outputs.ok == 'false'
+        run: |
+          echo "::notice::atom $ATOM_REV sem 'ext publish --v2'; cron de timestamp em espera (docs/store-v2.md §8)."
+      - name: Re-assinar só timestamp (nova versão, expires = agora + 1 dia)
+        if: steps.v2.outputs.present == 'true' && steps.tool.outputs.ok == 'true'
+        env:
+          STORE_TIMESTAMP_KEY: ${{ secrets.STORE_TIMESTAMP_KEY }}
+        run: |
+          # Falha aqui = alerta: em ~24h todos os clientes recusam a loja
+          # (`tuf expired`). A falha do cron notifica os watchers do repo.
+          umask 077
+          ts="$(mktemp)"
+          printf '%s' "$STORE_TIMESTAMP_KEY" > "$ts"
+          atom ext publish --v2 --store-dir v2 \
+            --timestamp-key "$ts" --refresh-timestamp-only
+          rm -f "$ts"
+          git config user.name "store-ci"
+          git config user.email "store-ci@local"
+          git add v2/metadata/timestamp.json
+          git diff --cached --quiet && echo "sem mudanças" || (
+            git commit -m "store: refresh timestamp" && git push
+          )
+
+  e2e-v2:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Detectar v2 com pacotes
+        id: v2
+        run: |
+          if [ -d v2/metadata ] && [ -n "$(find v2/targets -name '*.tar.gz' -print -quit 2>/dev/null)" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: v2 sem pacotes — espera
+        if: steps.v2.outputs.present == 'false'
+        run: |
+          echo "::notice::sem pacotes publicados em v2/targets; e2e v2 em espera (primeiro pacote chega pelo release.yml do atom-extensions)."
+      - name: Instalar atom (tag pinada)
+        if: steps.v2.outputs.present == 'true'
+        run: cargo install --git "$ATOM_REPO" --rev "$ATOM_REV" --locked atom
+      - name: Sondar ferramenta v2
+        id: tool
+        if: steps.v2.outputs.present == 'true'
+        run: |
+          if atom ext publish --help | grep -q -e '--v2'; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Ferramenta v2 ausente — espera
+        if: steps.v2.outputs.present == 'true' && steps.tool.outputs.ok == 'false'
+        run: |
+          echo "::notice::atom $ATOM_REV sem suporte v2 no cliente/ferramenta; e2e v2 em espera."
+      - name: Instala de v2/ + expira + migrate
+        if: steps.v2.outputs.present == 'true' && steps.tool.outputs.ok == 'true'
+        run: |
+          set -euo pipefail
+          export HOME="$RUNNER_TEMP/fakehome"
+          mkdir -p "$HOME"
+          ROOT_SHA="$(sha256sum v2/metadata/1.root.json | cut -d' ' -f1)"
+          # 1. Perfil limpo instala de v2/ via --root.
+          atom source add oficial "file://$PWD/v2" --root "$ROOT_SHA"
+          atom ext install atom/code-starter --source oficial
+          # 2. Cópia com timestamp expirado é recusada (tuf expired).
+          #    A forma exata de gerar o timestamp expirado re-assinado segue a
+          #    ferramenta v2 do core (§8); o rascunho usa o mesmo entrypoint.
+          rm -rf /tmp/v2expired && cp -r v2 /tmp/v2expired
+          atom ext publish --v2 --store-dir /tmp/v2expired --expire-timestamp-now
+          EXPSHA="$(sha256sum /tmp/v2expired/metadata/1.root.json | cut -d' ' -f1)"
+          export HOME="$RUNNER_TEMP/fakehome2"
+          mkdir -p "$HOME"
+          atom source add oficial "file:///tmp/v2expired" --root "$EXPSHA"
+          if atom ext install atom/code-starter --source oficial 2>&1 | grep -q expired; then
+            echo "expirado recusado (ok)"
+          else
+            echo "ERRO: metadado expirado foi aceito"; exit 1
+          fi
+          # 3. Migrate v1 -> v2 sem reinstalar.
+          export HOME="$RUNNER_TEMP/fakehome"
+          atom source migrate oficial --root "$ROOT_SHA"
+          atom ext install atom/code-starter --source oficial

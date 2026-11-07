@@ -9,8 +9,11 @@
 6. Usuários: `atom source add oficial https://wkoch.github.io/atom-store/v1/ --keys ed25519:<raiz>`.
    O cliente v1.1 mostra aviso para sources v1; a source padrão embutida no binário deve ser a `v2/`.
 
-## Setup inicial `store/v2` (quando a ferramenta v2 do core existir)
 Spec: `docs/store-v2.md`. Formato TUF próprio do Atom (§1.1): não use `tuftool`/`python-tuf`.
+A ferramenta de publicação v2 do core (`§8`) ainda não existe: `store::tuf::publish_repo` atual só
+serve p/ teste (§9). Os jobs v2 do `store.yml` já estão prontos e sondam `atom ext publish --v2`;
+enquanto a ferramenta não existir, emitem notice e passam sem publicar (ver README). Nada neste repo
+inventa formato próprio: chaves, comandos e layout seguem estritamente esta página e a spec.
 
 | Papel | Chave | Onde fica | Expiração | Limiar |
 |---|---|---|---|---|
