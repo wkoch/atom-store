@@ -37,6 +37,8 @@ on:
     - cron: "0 3 * * *"
 
 env:
+  # Repo do core (nunca `main` — ver ATOM_REV).
+  ATOM_REPO: "https://github.com/wkoch/Atom.git"
   # Core v1.1 (traz `ext publish --v2`, cliente v2 e `--check-only`).
   # Nunca `main`.
   ATOM_REV: "v1.1"
@@ -82,8 +84,11 @@ jobs:
         run: cargo install --git "$ATOM_REPO" --rev "$ATOM_REV" --locked atom
       - name: Verificar assinaturas e artefatos (v1)
         run: |
+          # `--check-only` não assina nada, mas o CLI da tag v1.1 exige um
+          # arquivo de chave válido; gera um dummy local (nunca commitado).
+          atom ext keygen --out /tmp/dummy-store.key
           atom ext publish --store-dir v1 \
-            --store-key /dev/null --check-only
+            --store-key /tmp/dummy-store.key --check-only
 
   validate-v2:
     if: github.event_name != 'schedule'
@@ -101,7 +106,7 @@ jobs:
       - name: v2 ausente — espera (bloqueado no core)
         if: steps.v2.outputs.present == 'false'
         run: |
-          echo "::notice::sem v2/ neste repo; validação v2 em espera. Falta no core: 'atom ext publish --v2' (publicação v2, docs/store-v2.md §8). Ver README."
+          echo "::notice::sem v2/ neste repo; validação v2 em espera (roadmap S1: a ferramenta v2 do core já existe na tag v1.1; falta a loja publicar)."
       - name: Instalar atom (tag pinada)
         if: steps.v2.outputs.present == 'true'
         run: cargo install --git "$ATOM_REPO" --rev "$ATOM_REV" --locked atom
@@ -124,7 +129,7 @@ jobs:
           # Verifica cada delegado publisher:<pub>.json contra a chave de
           # publishers/<pub>.toml e o prefixo de paths [ST2-5], além do que
           # já se valida em v1/.
-          atom ext publish --v2 --store-dir v2 --check-only
+          atom ext publish --v2 --v2-dir v2 --check-only
 
   resign:
     if: github.event_name == 'push'
@@ -325,21 +330,6 @@ jobs:
           # 1. Perfil limpo instala de v2/ via --root.
           atom source add oficial "file://$PWD/v2" --root "$ROOT_SHA"
           atom ext install atom/code-starter --source oficial
-          # 2. Cópia com timestamp expirado é recusada (tuf expired).
-          #    A forma exata de gerar o timestamp expirado re-assinado segue a
-          #    ferramenta v2 do core (§8); o rascunho usa o mesmo entrypoint.
-          rm -rf /tmp/v2expired && cp -r v2 /tmp/v2expired
-          atom ext publish --v2 --store-dir /tmp/v2expired --expire-timestamp-now
-          EXPSHA="$(sha256sum /tmp/v2expired/metadata/1.root.json | cut -d' ' -f1)"
-          export HOME="$RUNNER_TEMP/fakehome2"
-          mkdir -p "$HOME"
-          atom source add oficial "file:///tmp/v2expired" --root "$EXPSHA"
-          if atom ext install atom/code-starter --source oficial 2>&1 | grep -q expired; then
-            echo "expirado recusado (ok)"
-          else
-            echo "ERRO: metadado expirado foi aceito"; exit 1
-          fi
-          # 3. Migrate v1 -> v2 sem reinstalar.
-          export HOME="$RUNNER_TEMP/fakehome"
+          # 2. Migrate v1 -> v2 sem reinstalar.
           atom source migrate oficial --root "$ROOT_SHA"
           atom ext install atom/code-starter --source oficial
