@@ -1,7 +1,10 @@
 {
   "store": 1,
   "name": "Atom Oficial",
-  "index_signature_keys": ["ed25519:L58t+4xeT/haVEDAOE+1UldLY6sUii6P3pauSf8+y28="],
-  "artifacts_base": "https://github.com/wkoch/atom-extensions/releases/download/",
-  "features": ["catalog"]
+  "index_signature_keys": [
+    "ed25519:L58t+4xeT/haVEDAOE+1UldLY6sUii6P3pauSf8+y28="
+  ],
+  "features": [
+    "catalog"
+  ]
 }
