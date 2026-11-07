@@ -37,11 +37,9 @@ on:
     - cron: "0 3 * * *"
 
 env:
-  ATOM_REPO: "https://github.com/wkoch/atom.git"
-  # Última tag publicada do core (traz `ext publish` v1 + `--check-only`).
-  # Mover p/ `v1.1` assim que o core tagueá-la (necessária p/ `ext publish
-  # --v2`); nunca `main`.
-  ATOM_REV: "v1.0.0"
+  # Core v1.1 (traz `ext publish --v2`, cliente v2 e `--check-only`).
+  # Nunca `main`.
+  ATOM_REV: "v1.1"
 
 jobs:
   validate:

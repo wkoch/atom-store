@@ -6,24 +6,16 @@ Ordem obrigatória. Legenda `[ ]`/`[x]`. Este repo é dado assinado; o código (
 ## S0 — `store/v1` em operação
 - [x] `v1/config.json` com `index_signature_keys` e `artifacts_base`; publisher `atom` em `publishers/`.
 - [x] `store.yml`: `--check-only` estrito (sem `|| true`); `atom` instalado de tag pinada
-      (`ATOM_REV: v1.0.0`, mover p/ `v1.1` quando o core tagueá-la; nunca `main`).
+      (`ATOM_REV: v1.1`; nunca `main`).
 - [ ] GitHub Pages servindo `v1/`; `atom source add oficial …/v1/ --keys …` instala um pacote real.
 - [ ] Primeiro PR vindo do `release.yml` do `atom-extensions` mesclado e assinado (aceite do E0 de lá).
 
 Aceite: perfil limpo instala `atom/code-starter` a partir de `v1/`.
 
 ## S1 — `store/v2` lado a lado (ADR-024)
-Pré-requisitos **(core)**: CLI instala de source v2 (`ext install/search/info/update` via `store::tuf`);
-`expires` real aceito; ferramenta de publicação v2 (`docs/store-v2.md §8`).
-
-**Bloqueado no core** (parcialmente entregue lá): verificação TUF do cliente existe
-(`atom-core::store::tuf`, `check_expiry`, `refresh_repo [ST2-1..5]`); falta a **ferramenta de publicação
-v2** — `docs/store-v2.md §8` (lado publisher: gera/atualiza `publisher:<pub>.json` assinado com
-`version` incrementada; lado loja: aceita o delegado, regenera `catalog.json`, assina
-`targets`/`snapshot`/`timestamp` com `version` incrementada e `expires` real). O `publish_repo` atual
-só serve p/ teste (§9: exige todas as seeds, `version = 1`, `expires` sentinela).
-Os jobs v2 do `store.yml` abaixo estão prontos e sondam `atom ext publish --v2`; enquanto a
-ferramenta não existir, emitem notice e passam sem publicar (documentado no README).
+Pré-requisitos **(core)** entregues na tag `v1.1`: CLI instala de source v2
+(`ext install/search/info/update` via `store::tuf`); `expires` real aceito;
+ferramenta de publicação v2 (`atom ext publish --v2`, `docs/store-v2.md §8`).
 
 - [ ] Chaves `v2` geradas e guardadas conforme `docs/operations.md` (root 2 de 3 offline; `snapshot` e
       `timestamp` como secrets do CI).
