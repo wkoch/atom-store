@@ -24,13 +24,13 @@
         {
           "platform": "linux-amd64",
           "url": "artifacts/atom/atom-tools-fs-0.2.0-linux-amd64.tar.gz",
-          "sha256": "6d21e94126f7ff8aaa008292a892252a338d894db43cc9d8b7030f0c6dab6c6a",
-          "size": 2179,
-          "signature": "lzykuoCtEpnjNwLNqv7I33aRS1BMN4RVi0mcfNCPZ3SgweRreq1Ss+2dO1qYTPVPxEKTH6LpQXb+Q+wV+EOwAA=="
+          "sha256": "2a45811f8b996aae29abf2c0d4be4a9233093d832e04c0c59ccae7fd3c59172b",
+          "size": 5514644,
+          "signature": "sdaIp/h4BTyA+3eflK1OuO+2sPvKEcIT0bAZ3CVIU8DsrqDj74R+5nDd/ugjxr7eQ1UKzXf8L1TnbcpjSHhVDw=="
         }
       ],
       "yanked": false,
-      "published_at": "1794020069"
+      "published_at": "1794020162"
     }
   ]
 }
