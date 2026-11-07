@@ -1,4 +1,7 @@
+<!-- Cópia de `atom/docs/specs/store.md` (repo `atom`, v1.1). Não editar aqui: alterar no core e copiar. -->
 # Spec: Protocolo da loja `store/v1`
+
+Status: estável desde v1.0. **(v1.1)** Sucessor `store/v2` (TUF) em `store-v2.md`; o cliente suporta ambos (`docs/deprecation.md`). `store/v1` não protege contra *freeze attack* (índice antigo validamente assinado servido para sempre) nem tem limiar de chaves; o cliente mostra aviso para sources v1. 
 
 Objetivo: uma loja deve ser servível como **arquivos estáticos** (repo GitHub + Pages/raw, S3, qualquer HTTP). Um servidor dinâmico implementa os mesmos caminhos e pode adicionar endpoints opcionais.
 
